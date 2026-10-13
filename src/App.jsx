@@ -1,6 +1,5 @@
 /* ============================================================================
    RYUGA — DevSecOps & Platform Engineering portfolio
-   SINGLE-FILE App.jsx  (drop-in replacement; no local imports)
    ============================================================================ */
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -395,7 +394,7 @@ const PROFILE = {
   wordmark: "AYUSH KUMAR SRIVASTAVA",
   email: "ayush.kumar.srivastava150@gmail.com",
   location: "Lucknow, India",
-  site: "https://ryuga.dev",
+  site: "https://ryuga-portfolio.vercel.app",
   updated: "14 October 2026",
   github: { label: "GitHub", handle: "heroaks", url: "https://github.com/heroaks" },
   linkedin: { label: "LinkedIn", handle: "ayush-srivastava-150", url: "https://www.linkedin.com/in/ayush-srivastava-150" },
