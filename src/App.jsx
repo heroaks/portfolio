@@ -406,7 +406,6 @@ const PROFILE = {
   ],
 };
 const RESUME_PDF = "/resume.pdf"; /* set to "/resume.pdf" if you drop a real file in public/ */
-const RESUME_JSON = "/resume.json";
 
 const HERO = {
   meta: "DEVSECOPS & PLATFORM ENGINEERING",
@@ -1651,12 +1650,6 @@ function Credentials({ onTxt }) {
                 </div>
               ))}
             </div>
-            <span className="meta dim" style={{ display: "block", marginTop: 26 }}>Machine readable</span>
-            <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <button className="btn" type="button" onClick={onTxt}>
-                <Ico n="file" /> resume.txt
-              </button>
-            </div>
           </motion.div>
         </div>
       </div>
@@ -1719,7 +1712,6 @@ function Contact() {
             <div className="contact-links">
               <a href={PROFILE.github.url} target="_blank" rel="noreferrer noopener">GitHub <Ico n="upRight" /></a>
               <a href={PROFILE.linkedin.url} target="_blank" rel="noreferrer noopener">LinkedIn <Ico n="upRight" /></a>
-              <a href={RESUME_JSON} target="_blank" rel="noreferrer noopener">Resume JSON <Ico n="upRight" /></a>
             </div>
           </div>
         </motion.div>
