@@ -406,7 +406,6 @@ const PROFILE = {
   ],
 };
 const RESUME_PDF = "/resume.pdf"; /* set to "/resume.pdf" if you drop a real file in public/ */
-const RESUME_JSON = "/resume.json";
 
 const HERO = {
   meta: "DEVSECOPS & PLATFORM ENGINEERING",
@@ -1653,9 +1652,6 @@ function Credentials({ onTxt }) {
             </div>
             <span className="meta dim" style={{ display: "block", marginTop: 26 }}>Machine readable</span>
             <div style={{ marginTop: 12, display: "flex", gap: 12, flexWrap: "wrap" }}>
-              <a className="btn" href={RESUME_JSON} target="_blank" rel="noreferrer noopener">
-                <Ico n="json" /> resume.json
-              </a>
               <button className="btn" type="button" onClick={onTxt}>
                 <Ico n="file" /> resume.txt
               </button>
@@ -1680,7 +1676,7 @@ function ResumeBand({ onOpen, onPdf, onTxt }) {
               <span className="accent" style={{ display: "block" }}>Read it here, or print it to PDF.</span>
             </h2>
             <p style={{ margin: "18px 0 0", maxWidth: "54ch", fontWeight: 300, fontSize: 15.5, lineHeight: 1.7, color: "rgba(226,232,240,.78)" }}>
-              No gated download, no stale attachment. The document renders as a print-optimized sheet, exports as plain text for applicant tracking systems, and is also published as structured JSON at <span className="accent">/resume.json</span>.
+              No gated download, no stale attachment. The document renders as a print-optimized sheet, exports as plain text for applicant tracking systems.
             </p>
             <div className="btn-row">
               <button className="btn solid" type="button" onClick={onOpen}><Ico n="eye" /> View resume</button>
