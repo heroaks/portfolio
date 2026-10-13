@@ -406,6 +406,7 @@ const PROFILE = {
   ],
 };
 const RESUME_PDF = "/resume.pdf"; /* set to "/resume.pdf" if you drop a real file in public/ */
+const RESUME_JSON = "/resume.json";
 
 const HERO = {
   meta: "DEVSECOPS & PLATFORM ENGINEERING",
