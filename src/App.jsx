@@ -588,7 +588,7 @@ const StatusBadge = ({ s, className }) => (
 const PROFILE = {
   name: "Ayush Kumar Srivastava",
   wordmark: "AYUSH SRIVASTAVA",
-  footmark: "AYUSH",
+  footmark: "RYUGA",
   role: "DevSecOps & Platform Engineer",
   email: "ayush.kumar.srivastava150@gmail.com",
   phone: "+91 63903 67652",
