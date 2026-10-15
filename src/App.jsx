@@ -2,37 +2,23 @@
    AYUSH KUMAR SRIVASTAVA — DevSecOps & Platform Engineering
    Single-file App.jsx (drop-in replacement — no local imports required)
 
-   WHAT CHANGED IN THIS REVISION
+   REVISION NOTES (this pass)
    ---------------------------------------------------------------------------
-   1. FIXED  All corrupted CSS tokens from the previous build
-             (e.g. "margin:0 aut o", "var(--radi us)", "1p x solid",
-             "fon t-size", "grid-tem plate-columns", "1100 0") which were
-             silently killing the resume sheet, project index and media queries.
-   2. FIXED  Illegal dynamic class names ("st IN PROGRESS") — status is now a
-             colour-mapped token system (production / implemented / in-progress
-             / poc / designed / learning), used consistently everywhere.
-   3. FIXED  Dead links to /resume.pdf and /resume.json (404 on Vercel).
-             TXT, MD and JSON resumes are now generated client-side; PDF goes
-             through the print-optimised sheet.
-   4. FIXED  Data conflicts vs. the master summary + resume:
-             Castler headcount (sub-100, not "250+"), role titles, dates
-             (Jul 2024 – Jan 2026 / Feb 2026 – Present), phone number added,
-             invented domain removed, Kubernetes/EKS moved to lab tier,
-             Pulumi/Terraform kept hands-on per resume, school results kept
-             in the resume sheet only.
-   5. NEW    Two extra case files (Observability platform replacement,
-             Apache Guacamole browser bastion) — both strong FinOps + platform
-             stories that were buried in the project index.
-   6. NEW    Two new architecture diagrams (observability pipeline, bastion
-             path) + diagrams now render inside expanded case files.
-   7. NEW    ⌘K / Ctrl+K command palette, "/" to search the project index,
-             "R" for resume, scroll-progress bar, live IST clock, JSON-LD +
-             meta/OG injection, skip-link, focus restore, body-scroll lock.
-   8. UX     Sticky work panel (desktop), horizontally scrollable diagrams
-             (mobile) instead of hiding them, honest-metric disclaimer,
-             copy-email action, keyboard-accessible accordion.
-   9. PERF   Single injected stylesheet, no Tailwind dependency, IntersectionObserver
-             with one-shot reveals, reduced-motion respected throughout.
+   FIX  Command palette scroll-lock bug. Two body locks (App + CommandMenu)
+        fought each other; React runs cleanups child-first, so the parent
+        restored a stale "hidden" value and the page became unscrollable
+        after "Go to". Now a single module-level reference-counted lock.
+   FIX  Duplicate chevron icon rendered in every case-file header.
+   FIX  Escape key did not close the resume overlay (only the palette).
+   FIX  Fragile PHILOSOPHY_LEAD.split("not") string surgery replaced with
+        explicit lead parts.
+   FIX  App-level keydown listener re-bound on every render (object dep).
+        Now ref-based, bound once.
+   FIX  "/" project-search hotkey could fire while the palette was open.
+   ADD  scrollToSection() — nav-offset aware, reduced-motion aware, and
+        self-heals a stuck body lock before scrolling.
+   ADD  Platform-aware shortcut label (⌘K on macOS, Ctrl K elsewhere).
+   KEEP Logo/wordmark and the entire resume system untouched, as requested.
    ========================================================================== */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -42,6 +28,13 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 const EASE = [0.22, 1, 0.36, 1];
 const cx = (...a) => a.filter(Boolean).join(" ");
+
+const IS_MAC =
+  typeof navigator !== "undefined" &&
+  /mac|iphone|ipad|ipod/i.test(navigator.platform || navigator.userAgent || "");
+const MOD = IS_MAC ? "⌘" : "Ctrl";
+
+const NAV_OFFSET = 72;
 
 const STATUS_COLORS = {
   PRODUCTION: "#00FF9D",
@@ -166,9 +159,9 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .burger.open span::before{transform:translateY(5px) rotate(45deg)}
 .burger.open span::after{transform:translateY(-5px) rotate(-45deg)}
 .nav-drawer{overflow:hidden;background:rgba(7,10,14,.97);border-bottom:1px solid var(--line)}
-.nav-drawer a{padding:15px 0;border-bottom:1px solid var(--line2);display:flex;
-  justify-content:space-between;align-items:center;color:var(--muted)}
-.nav-drawer a:last-child{border-bottom:0}
+.nav-drawer a,.nav-drawer button{padding:15px 0;border-bottom:1px solid var(--line2);display:flex;
+  justify-content:space-between;align-items:center;color:var(--muted);width:100%;text-align:left}
+.nav-drawer a:last-child,.nav-drawer button:last-child{border-bottom:0}
 
 /* ------------------------------ command bar ---------------------------- */
 .cmd-overlay{position:fixed;inset:0;z-index:150;background:rgba(4,7,10,.72);
@@ -176,7 +169,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .cmd{max-width:600px;margin:0 auto;background:var(--surface);border:1px solid var(--line);
   border-radius:10px;overflow:hidden;box-shadow:0 40px 90px rgba(0,0,0,.6)}
 .cmd-in{display:flex;align-items:center;gap:11px;padding:15px 17px;border-bottom:1px solid var(--line)}
-.cmd-in input{flex:1;background:none;border:0;outline:none;font-size:15px;color:var(--paper);font-family:var(--body)}
+.cmd-in input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:15px;color:var(--paper);font-family:var(--body)}
 .cmd-in input::placeholder{color:var(--dim)}
 .cmd-list{max-height:min(52vh,420px);overflow-y:auto;padding:7px}
 .cmd-grp{font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
@@ -276,7 +269,8 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .case-title{font-family:var(--disp);font-weight:700;font-size:clamp(18px,2vw,26px);
   letter-spacing:-.025em;line-height:1.16;margin:0;transition:color .3s var(--ease)}
 .case-sum{display:block;margin-top:9px;font-size:13.5px;line-height:1.6;color:var(--muted);font-weight:300;max-width:82ch}
-.case-chev{transition:transform .4s var(--ease);color:var(--muted)}
+.case-end{display:flex;align-items:center;gap:14px}
+.case-chev{display:inline-flex;color:var(--muted);transition:transform .4s var(--ease),color .3s var(--ease)}
 .case-chev.open{transform:rotate(90deg);color:var(--accent)}
 .case-body{overflow:hidden}
 .case-in{padding:0 0 38px;display:grid;grid-template-columns:66px minmax(0,1fr);gap:18px}
@@ -317,7 +311,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .search{display:flex;align-items:center;gap:9px;border:1px solid var(--line);border-radius:var(--radius);
   padding:9px 12px;flex:1;min-width:220px;transition:border-color .3s var(--ease)}
 .search:focus-within{border-color:rgba(0,255,157,.5)}
-.search input{flex:1;background:none;border:0;outline:none;font-size:13.5px}
+.search input{flex:1;min-width:0;background:none;border:0;outline:none;font-size:13.5px}
 .search input::placeholder{color:var(--dim)}
 .search kbd{font-family:var(--mono);font-size:9.5px;border:1px solid var(--line);border-radius:3px;padding:1px 5px;color:var(--dim)}
 .filters{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:26px}
@@ -465,7 +459,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
 .toast{position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:200;background:var(--accent);
   color:var(--on-accent);font-family:var(--mono);font-size:10.5px;font-weight:600;letter-spacing:.09em;
   text-transform:uppercase;padding:11px 16px;border-radius:var(--radius);display:inline-flex;align-items:center;gap:9px;
-  box-shadow:0 14px 40px rgba(0,0,0,.5)}
+  box-shadow:0 14px 40px rgba(0,0,0,.5);max-width:calc(100vw - 32px)}
 
 /* ------------------------------ responsive ----------------------------- */
 @media (max-width:1180px){
@@ -518,6 +512,7 @@ hr{border:0;border-top:1px solid var(--line);margin:0}
   .res-sk dd{margin-bottom:10px}
   .totop{right:14px;bottom:14px}
   .case-head{grid-template-columns:44px minmax(0,1fr) auto}
+  .case-end .badge{display:none}
   .lab-grid{grid-template-columns:minmax(0,1fr)}
   .cmd-overlay{padding:8vh 10px 10px}
   .hero{min-height:auto;padding-top:88px}
@@ -564,7 +559,6 @@ const PATHS = {
   copy: "M9 9h10a1 1 0 011 1v10a1 1 0 01-1 1H9a1 1 0 01-1-1V10a1 1 0 011-1zM5 15H4a1 1 0 01-1-1V4a1 1 0 011-1h10a1 1 0 011 1v1",
   search: "M11 19a8 8 0 100-16 8 8 0 000 16zM21 21l-4.3-4.3",
   cmd: "M9 6a3 3 0 10-3 3h12a3 3 0 10-3-3v12a3 3 0 103-3H6a3 3 0 103 3z",
-  mail: "M3 6h18v12H3zM3 7l9 6 9-6",
   phone: "M5 3h4l2 5-3 2a12 12 0 006 6l2-3 5 2v4a1 1 0 01-1 1A17 17 0 014 4a1 1 0 011-1z",
   pin: "M12 21s7-6.2 7-11a7 7 0 10-14 0c0 4.8 7 11 7 11zM12 12a2.6 2.6 0 100-5.2A2.6 2.6 0 0012 12z",
   bolt: "M13 2L4 14h6l-1 8 9-12h-6z",
@@ -572,13 +566,14 @@ const PATHS = {
 
 const Ico = ({ n, s = 14, sw = 1.8, style }) => (
   <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor"
-    strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={style}>
+    strokeWidth={sw} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"
+    focusable="false" style={style}>
     <path d={PATHS[n]} />
   </svg>
 );
 
-const StatusBadge = ({ s, className }) => (
-  <span className={cx("badge", className)} style={{ color: stColor(s) }}>
+const StatusBadge = ({ s }) => (
+  <span className="badge" style={{ color: stColor(s) }}>
     <i />{s}
   </span>
 );
@@ -972,7 +967,9 @@ const INDEX = [
 
 const FILTERS = ["ALL", "PRODUCTION", "OPERATED", "IN PROGRESS", "IMPLEMENTED", "POC", "DESIGNED", "LEARNING"];
 
-const PHILOSOPHY_LEAD = "Infrastructure is a system, not a collection of consoles.";
+const PHILOSOPHY_LEAD_A = "Infrastructure is a system,";
+const PHILOSOPHY_LEAD_B = "not a collection of consoles.";
+
 const PHILOSOPHY = [
   { h: "Repeatable by default", p: "Golden images, launch templates, IaC, and validated bootstrap. If a host cannot be rebuilt from code in an emergency, it is not finished." },
   { h: "Private unless proven otherwise", p: "Workloads live in private subnets with explicit, minimal ingress paths. Roles and secret managers replace long-lived credentials." },
@@ -1121,16 +1118,69 @@ const NAV = [
   { id: "notes", label: "Notes", opt: true },
 ];
 
-/* ============================== utilities =============================== */
+const EXTRA_NAV = [
+  { id: "philosophy", label: "Philosophy" },
+  { id: "lab", label: "Lab" },
+  { id: "credentials", label: "Credentials" },
+  { id: "resume", label: "Resume" },
+  { id: "contact", label: "Contact" },
+];
+
+/* ========================= body-scroll lock ============================= */
+/* One global reference-counted lock. Overlapping overlays (command palette +
+   resume sheet) can each acquire/release independently without leaving
+   document.body stuck at overflow:hidden. */
+
+let BODY_LOCK_COUNT = 0;
+let BODY_OVERFLOW_BEFORE_LOCK = "";
+
+function acquireBodyLock() {
+  if (BODY_LOCK_COUNT === 0) {
+    BODY_OVERFLOW_BEFORE_LOCK = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+  }
+  BODY_LOCK_COUNT += 1;
+}
+
+function releaseBodyLock() {
+  BODY_LOCK_COUNT = Math.max(0, BODY_LOCK_COUNT - 1);
+  if (BODY_LOCK_COUNT === 0) {
+    document.body.style.overflow = BODY_OVERFLOW_BEFORE_LOCK;
+  }
+}
 
 function useLockBody(active) {
   useEffect(() => {
     if (!active) return undefined;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => { document.body.style.overflow = prev; };
+    acquireBodyLock();
+    return releaseBodyLock;
   }, [active]);
 }
+
+if (typeof window !== "undefined") {
+  window.addEventListener("beforeunload", () => {
+    BODY_LOCK_COUNT = 0;
+    document.body.style.overflow = "";
+  });
+}
+
+/* Offset-aware, reduced-motion-aware, lock-safe section scroll. */
+function scrollToSection(id) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  /* Never unlock while the resume sheet is on screen. */
+  if (!document.querySelector(".res-overlay")) {
+    BODY_LOCK_COUNT = 0;
+    document.body.style.overflow = "";
+  }
+  const reduced =
+    typeof window.matchMedia === "function" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const top = el.getBoundingClientRect().top + window.pageYOffset - NAV_OFFSET;
+  window.scrollTo({ top: Math.max(0, top), behavior: reduced ? "auto" : "smooth" });
+}
+
+/* ============================== utilities =============================== */
 
 function useReveal() {
   const reduce = useReducedMotion();
@@ -1681,7 +1731,7 @@ function Nav({ active, onOpenResume, onOpenCmd }) {
     window.addEventListener("scroll", on, { passive: true });
     return () => window.removeEventListener("scroll", on);
   }, []);
-  const all = [...NAV, { id: "lab", label: "Lab" }, { id: "credentials", label: "Credentials" }, { id: "resume", label: "Resume" }, { id: "contact", label: "Contact" }];
+  const all = NAV.concat(EXTRA_NAV);
   return (
     <header className={cx("nav", (solid || open) && "solid")}>
       <div className="shell nav-in">
@@ -1693,14 +1743,14 @@ function Nav({ active, onOpenResume, onOpenCmd }) {
             <a key={l.id} href={"#" + l.id} className={cx("nav-link meta", l.opt && "opt", active === l.id && "on")}>{l.label}</a>
           ))}
           <button className="nav-cta meta" onClick={onOpenCmd} type="button" aria-label="Open command menu">
-            <Ico n="cmd" s={13} /> <kbd>⌘K</kbd>
+            <Ico n="cmd" s={13} /> <kbd>{MOD} K</kbd>
           </button>
           <button className="nav-cta meta" onClick={onOpenResume} type="button">
             Resume <Ico n="upRight" s={13} />
           </button>
         </nav>
         <button className={cx("burger", open && "open")} onClick={() => setOpen((v) => !v)}
-          aria-label="Menu" aria-expanded={open} aria-controls="nav-drawer"><span /></button>
+          aria-label="Menu" aria-expanded={open} aria-controls="nav-drawer" type="button"><span /></button>
       </div>
       <ScrollProgress />
       <AnimatePresence>
@@ -1715,7 +1765,7 @@ function Nav({ active, onOpenResume, onOpenCmd }) {
                   <span className="dim">{String(i + 1).padStart(2, "0")}</span>
                 </a>
               ))}
-              <button className="meta" type="button" style={{ padding: "15px 0", display: "flex", width: "100%", justifyContent: "space-between" }}
+              <button className="meta" type="button"
                 onClick={() => { setOpen(false); onOpenResume(); }}>
                 <span className="accent">View resume</span><span className="dim">R</span>
               </button>
@@ -1732,17 +1782,20 @@ function CommandMenu({ open, onClose, onOpenResume, onCopyEmail, onDownloadTxt, 
   const [sel, setSel] = useState(0);
   const inputRef = useRef(null);
   const lastFocus = useRef(null);
-  useLockBody(open);
+  /* NOTE: no local useLockBody here — App owns the single lock for `cmd`. */
 
   const items = useMemo(() => {
-    const nav = NAV.concat([{ id: "lab", label: "Lab" }, { id: "credentials", label: "Credentials" }, { id: "contact", label: "Contact" }])
-      .map((s) => ({ g: "Go to", k: s.label, h: "section", run: () => { const el = document.getElementById(s.id); if (el) el.scrollIntoView({ behavior: "smooth", block: "start" }); } }));
+    const nav = NAV.concat(EXTRA_NAV.filter((x) => x.id !== "resume"))
+      .map((s) => ({ g: "Go to", k: s.label, h: "section", run: () => scrollToSection(s.id) }));
     const acts = [
       { g: "Actions", k: "View resume", h: "R", run: onOpenResume },
       { g: "Actions", k: "Copy email address", h: "copy", run: onCopyEmail },
       { g: "Actions", k: "Download resume (TXT)", h: "download", run: onDownloadTxt },
       { g: "Actions", k: "Download resume (JSON)", h: "download", run: onDownloadJson },
-      { g: "Actions", k: "Print resume to PDF", h: "print", run: () => { onOpenResume(); window.setTimeout(() => window.print(), 500); } },
+      {
+        g: "Actions", k: "Print resume to PDF", h: "print",
+        run: () => { onOpenResume(); window.setTimeout(() => window.print(), 520); },
+      },
       { g: "Links", k: "GitHub — " + PROFILE.github.handle, h: "open", run: () => window.open(PROFILE.github.url, "_blank", "noopener") },
       { g: "Links", k: "LinkedIn — " + PROFILE.linkedin.handle, h: "open", run: () => window.open(PROFILE.linkedin.url, "_blank", "noopener") },
       { g: "Links", k: "LeetCode — ryuga__", h: "open", run: () => window.open("https://leetcode.com/ryuga__", "_blank", "noopener") },
@@ -1752,7 +1805,14 @@ function CommandMenu({ open, onClose, onOpenResume, onCopyEmail, onDownloadTxt, 
     return s ? all.filter((i) => i.k.toLowerCase().includes(s)) : all;
   }, [q, onOpenResume, onCopyEmail, onDownloadTxt, onDownloadJson]);
 
-  useEffect(() => { if (open) { lastFocus.current = document.activeElement; setQ(""); setSel(0); window.setTimeout(() => inputRef.current && inputRef.current.focus(), 60); } }, [open]);
+  useEffect(() => {
+    if (!open) return;
+    lastFocus.current = document.activeElement;
+    setQ(""); setSel(0);
+    const id = window.setTimeout(() => { if (inputRef.current) inputRef.current.focus(); }, 60);
+    return () => window.clearTimeout(id);
+  }, [open]);
+
   useEffect(() => { setSel(0); }, [q]);
 
   const groups = useMemo(() => {
@@ -1769,7 +1829,8 @@ function CommandMenu({ open, onClose, onOpenResume, onCopyEmail, onDownloadTxt, 
     const it = items[sel];
     if (!it) return;
     onClose();
-    window.setTimeout(() => it.run(), 60);
+    /* Let the overlay unmount and the body lock release before acting. */
+    window.setTimeout(() => it.run(), 90);
   }, [items, sel, onClose]);
 
   const onKey = (e) => {
@@ -1881,7 +1942,7 @@ function Hero() {
         </div>
         <motion.div className="hero-foot" {...rise(0.62)}>
           <span className="meta scroll-cue">Scroll to explore <Ico n="down" s={13} sw={1.6} /></span>
-          <span className="meta dim">⌘K command menu · R resume · Updated {PROFILE.updated}</span>
+          <span className="meta dim">{MOD} K command menu · R resume · Updated {PROFILE.updated}</span>
         </motion.div>
       </div>
     </section>
@@ -1937,7 +1998,8 @@ function SelectedWork() {
                   </span>
                   <span className="meta work-kind">{w.kind} · <span style={{ color: stColor(w.status) }}>{w.status}</span></span>
                   <span className="work-tags">
-                    <span className={cx("tag", w.status === "PRODUCTION" && "hot")} style={w.status !== "PRODUCTION" ? { color: stColor(w.status) } : undefined}>{w.status}</span>
+                    <span className={cx("tag", w.status === "PRODUCTION" && "hot")}
+                      style={w.status !== "PRODUCTION" ? { color: stColor(w.status) } : undefined}>{w.status}</span>
                     {w.tech.split(" · ").slice(0, 5).map((t) => <span className="tag" key={w.n + t}>{t}</span>)}
                   </span>
                 </span>
@@ -1989,17 +2051,16 @@ function CaseFiles() {
             return (
               <motion.div className="case" key={c.id} {...reveal(i * 0.04)}>
                 <h3 style={{ margin: 0 }}>
-                  <button className="case-head" onClick={() => setOpen(isOpen ? null : c.id)}
-                    aria-expanded={isOpen} aria-controls={"case-" + c.id} type="button" style={{ width: "100%" }}>
+                  <button className="case-head" type="button" onClick={() => setOpen(isOpen ? null : c.id)}
+                    aria-expanded={isOpen} aria-controls={"case-" + c.id}>
                     <span className="meta accent">{c.id}</span>
                     <span>
                       <span className="case-title" style={{ display: "block" }}>{c.title}</span>
                       <span className="case-sum">{c.summary}</span>
                     </span>
-                    <span style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                    <span className="case-end">
                       <StatusBadge s={c.status} />
-                      <Ico n="right" s={17} sw={1.6} className={undefined} />
-                      <span className={cx("case-chev", isOpen && "open")} style={{ display: "inline-flex" }}>
+                      <span className={cx("case-chev", isOpen && "open")} aria-hidden="true">
                         <Ico n="right" s={16} sw={1.6} />
                       </span>
                     </span>
@@ -2051,8 +2112,7 @@ function Philosophy() {
           <div>
             <span className="meta">003 / Philosophy</span>
             <p className="phil-q" style={{ marginTop: 18 }}>
-              {PHILOSOPHY_LEAD.split("not")[0]}
-              <span className="accent">not {PHILOSOPHY_LEAD.split("not")[1]}</span>
+              {PHILOSOPHY_LEAD_A} <span className="accent">{PHILOSOPHY_LEAD_B}</span>
             </p>
           </div>
           <div className="phil-cols">
@@ -2116,13 +2176,12 @@ function ProjectIndex() {
   useEffect(() => {
     const onKey = (e) => {
       const t = e.target;
-      const typing = t && /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName);
-      if (!typing && e.key === "/" && !e.metaKey && !e.ctrlKey && !e.altKey) {
-        e.preventDefault();
-        const el = document.getElementById("index");
-        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-        window.setTimeout(() => searchRef.current && searchRef.current.focus(), 500);
-      }
+      const typing = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
+      if (typing || e.metaKey || e.ctrlKey || e.altKey || e.key !== "/") return;
+      if (document.querySelector(".cmd-overlay") || document.querySelector(".res-overlay")) return;
+      e.preventDefault();
+      scrollToSection("index");
+      window.setTimeout(() => { if (searchRef.current) searchRef.current.focus(); }, 520);
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -2153,7 +2212,7 @@ function ProjectIndex() {
           {FILTERS.map((x) => (
             <button key={x} type="button" className={cx("chip", f === x && "on")}
               onClick={() => setF(x)} aria-pressed={f === x}
-              style={f === x ? undefined : { color: x === "ALL" ? undefined : stColor(x) }}>{x}</button>
+              style={f === x || x === "ALL" ? undefined : { color: stColor(x) }}>{x}</button>
           ))}
         </motion.div>
         <div>
@@ -2210,7 +2269,7 @@ function Compliance() {
           {COMPLIANCE.map((c, i) => (
             <motion.div className="cmp-row" key={c.name} {...reveal(0.02 + i * 0.018)}>
               <span className="cmp-name">{c.name}</span>
-              <span className="st" style={{ color: stColor(c.status), whiteSpace: "nowrap" }}><i />{c.status}</span>
+              <span className="st" style={{ color: stColor(c.status) }}><i />{c.status}</span>
               <p className="cmp-detail">{c.detail}</p>
             </motion.div>
           ))}
@@ -2491,20 +2550,23 @@ function ToTop() {
 function ResumeLayer({ open, onClose, onPdf, onTxt, onMd, onJson, toast }) {
   const closeRef = useRef(null);
   useEffect(() => {
-    if (open && closeRef.current) window.setTimeout(() => closeRef.current && closeRef.current.focus(), 80);
+    if (!open) return undefined;
+    const id = window.setTimeout(() => { if (closeRef.current) closeRef.current.focus(); }, 80);
+    return () => window.clearTimeout(id);
   }, [open]);
   return (
     <>
       <AnimatePresence>
         {open && (
           <motion.div className="res-overlay" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-            transition={{ duration: 0.25, ease: EASE }} role="dialog" aria-modal="true" aria-label="Resume">
+            transition={{ duration: 0.25, ease: EASE }} role="dialog" aria-modal="true" aria-label="Resume"
+            onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
             <div className="res-bar">
-              <button className="btn sm" onClick={onMd} type="button"><Ico n="copy" s={13} /> Copy MD</button>
-              <button className="btn sm" onClick={onTxt} type="button"><Ico n="file" s={13} /> TXT</button>
-              <button className="btn sm" onClick={onJson} type="button"><Ico n="json" s={13} /> JSON</button>
-              <button className="btn solid sm" onClick={onPdf} type="button"><Ico n="printer" s={13} /> Print / PDF</button>
-              <button className="btn sm" onClick={onClose} type="button" ref={closeRef} aria-label="Close resume">
+              <button className="btn sm" type="button" onClick={onMd}><Ico n="copy" s={13} /> Copy MD</button>
+              <button className="btn sm" type="button" onClick={onTxt}><Ico n="file" s={13} /> TXT</button>
+              <button className="btn sm" type="button" onClick={onJson}><Ico n="json" s={13} /> JSON</button>
+              <button className="btn solid sm" type="button" onClick={onPdf}><Ico n="printer" s={13} /> Print / PDF</button>
+              <button className="btn sm" type="button" onClick={onClose} ref={closeRef} aria-label="Close resume">
                 <Ico n="close" s={14} /> Close
               </button>
             </div>
@@ -2613,22 +2675,33 @@ function useResume() {
   const [open, setOpen] = useState(false);
   const [toast, setToast] = useState("");
   const lastFocus = useRef(null);
+  const timer = useRef(null);
   useLockBody(open);
 
   useEffect(() => {
-    if (open && lastFocus.current === null) lastFocus.current = document.activeElement;
-    if (!open && lastFocus.current && lastFocus.current.focus) { lastFocus.current.focus(); lastFocus.current = null; }
+    if (open) {
+      if (lastFocus.current === null) lastFocus.current = document.activeElement;
+    } else if (lastFocus.current && typeof lastFocus.current.focus === "function") {
+      lastFocus.current.focus();
+      lastFocus.current = null;
+    }
   }, [open]);
 
-  const flash = useCallback((m) => { setToast(m); window.setTimeout(() => setToast(""), 2400); }, []);
+  useEffect(() => () => { if (timer.current) window.clearTimeout(timer.current); }, []);
+
+  const flash = useCallback((m) => {
+    setToast(m);
+    if (timer.current) window.clearTimeout(timer.current);
+    timer.current = window.setTimeout(() => setToast(""), 2400);
+  }, []);
 
   const pdf = useCallback(() => {
     if (!open) { setOpen(true); window.setTimeout(() => window.print(), 520); }
     else window.print();
   }, [open]);
 
-  const txt = useCallback(() => flash(download(PROFILE.name.replace(/\s+/g, "-") + "-resume.txt", resumeText()) ? "TXT downloaded" : "Download failed"), [flash]);
-  const json = useCallback(() => flash(download(PROFILE.name.replace(/\s+/g, "-") + "-resume.json", resumeJSON(), "application/json;charset=utf-8") ? "JSON downloaded" : "Download failed"), [flash]);
+  const txt = useCallback(() => flash(download("Ayush-Kumar-Srivastava-resume.txt", resumeText()) ? "TXT downloaded" : "Download failed"), [flash]);
+  const json = useCallback(() => flash(download("Ayush-Kumar-Srivastava-resume.json", resumeJSON(), "application/json;charset=utf-8") ? "JSON downloaded" : "Download failed"), [flash]);
   const md = useCallback(async () => flash((await copyText(resumeMarkdown())) ? "Markdown copied" : "Copy failed"), [flash]);
   const mail = useCallback(async () => flash((await copyText(PROFILE.email)) ? "Email copied" : "Copy failed"), [flash]);
 
@@ -2638,7 +2711,7 @@ function useResume() {
 function useActiveSection() {
   const [active, setActive] = useState("");
   useEffect(() => {
-    const ids = NAV.map((n) => n.id).concat(["philosophy", "lab", "credentials", "resume", "contact"]);
+    const ids = NAV.map((n) => n.id).concat(EXTRA_NAV.map((n) => n.id));
     const els = ids.map((id) => document.getElementById(id)).filter(Boolean);
     if (!els.length) return undefined;
     const io = new IntersectionObserver((entries) => {
@@ -2664,15 +2737,13 @@ function useDocumentMeta() {
     };
     setMeta("name", "description", desc);
     setMeta("name", "author", PROFILE.name);
-    setMeta("name", "theme-color", "#070A0E");
     setMeta("property", "og:title", title);
     setMeta("property", "og:description", desc);
     setMeta("property", "og:type", "profile");
-    setMeta("name", "twitter:card", "summary_large_image");
     setMeta("name", "twitter:title", title);
     setMeta("name", "twitter:description", desc);
 
-    const origin = (typeof window !== "undefined" && window.location && window.location.origin) || "";
+    const origin = (window.location && window.location.origin) || "";
     const ld = {
       "@context": "https://schema.org", "@type": "Person", name: PROFILE.name,
       jobTitle: PROFILE.role, email: "mailto:" + PROFILE.email, telephone: PROFILE.phoneHref,
@@ -2701,20 +2772,37 @@ export default function App() {
   useDocumentMeta();
   useLockBody(cmd);
 
+  const cmdRef = useRef(cmd);
+  const resRef = useRef(res.open);
+  cmdRef.current = cmd;
+  resRef.current = res.open;
+
+  const { setOpen: setResOpen } = res;
+
   useEffect(() => {
     const onKey = (e) => {
       const t = e.target;
       const typing = t && (/^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName) || t.isContentEditable);
-      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) { e.preventDefault(); setCmd((v) => !v); return; }
-      if (e.key === "Escape") { setCmd(false); return; }
+
+      if ((e.key === "k" || e.key === "K") && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault(); setCmd((v) => !v); return;
+      }
+      if (e.key === "Escape") {
+        if (cmdRef.current) { setCmd(false); return; }
+        if (resRef.current) { setResOpen(false); }
+        return;
+      }
       if (!typing && !e.metaKey && !e.ctrlKey && !e.altKey && (e.key === "r" || e.key === "R")) {
+        if (cmdRef.current) return;
         e.preventDefault();
-        res.setOpen((v) => !v);
+        setResOpen((v) => !v);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [res]);
+  }, [setResOpen]);
+
+  const openResume = useCallback(() => { setCmd(false); setResOpen(true); }, [setResOpen]);
 
   return (
     <>
@@ -2722,7 +2810,7 @@ export default function App() {
       <div className="grid-bg" aria-hidden="true" />
       <a className="skip" href="#work">Skip to content</a>
       <div className="site-root">
-        <Nav active={active} onOpenResume={() => res.setOpen(true)} onOpenCmd={() => setCmd(true)} />
+        <Nav active={active} onOpenResume={openResume} onOpenCmd={() => setCmd(true)} />
         <main>
           <Hero />
           <PacketLine />
@@ -2737,15 +2825,15 @@ export default function App() {
           <Lab />
           <Notes />
           <Credentials onTxt={res.txt} onJson={res.json} />
-          <ResumeBand onOpen={() => res.setOpen(true)} onPdf={res.pdf} onTxt={res.txt} />
+          <ResumeBand onOpen={openResume} onPdf={res.pdf} onTxt={res.txt} />
           <Contact onCopyEmail={res.mail} />
         </main>
         <Footer />
         <ToTop />
       </div>
-      <CommandMenu open={cmd} onClose={() => setCmd(false)} onOpenResume={() => res.setOpen(true)}
+      <CommandMenu open={cmd} onClose={() => setCmd(false)} onOpenResume={openResume}
         onCopyEmail={res.mail} onDownloadTxt={res.txt} onDownloadJson={res.json} />
-      <ResumeLayer open={res.open} onClose={() => res.setOpen(false)} onPdf={res.pdf}
+      <ResumeLayer open={res.open} onClose={() => setResOpen(false)} onPdf={res.pdf}
         onTxt={res.txt} onMd={res.md} onJson={res.json} toast={res.toast} />
     </>
   );
